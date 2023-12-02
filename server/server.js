@@ -12,9 +12,8 @@ await connect();
 app.use(express.json());
 app.use(cors());
 
-app.use('/patient-priority', patientPriorityRoute);
-
+app.use("/patient-priority", patientPriorityRoute);
 
 app.listen(PORT, () => {
-    console.log(`Server working on port ${PORT}`);
-})
+  console.log(`Server working on port ${PORT}`);
+});

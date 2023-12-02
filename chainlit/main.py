@@ -10,7 +10,7 @@ import re
 import os
 from credentials import OPENAI_API_KEY
 from templates import template_for_has_cancer, template_for_does_not_have_cancer
-from utils import cancer_category
+from utils import cancer_category, get_prediction
 from PIL import Image
 import io
 import time
@@ -98,69 +98,29 @@ from contextlib import redirect_stdout
 
 @cl.on_chat_start
 async def main():
-    cl.user_session.set("index", 0)
-    cl.user_session.set("has_uploaded_image", False)
-    await cl.Message("Upload image of your condition").send()
-
-@cl.on_file_upload(accept=['image/png'])
-async def main(file:any):
-    index = cl.user_session.get("index")
-    file = file[0]["content"]
+    file = None
+    while file == None:
+        file = await cl.AskFileMessage(content="Please upload a text file to begin", accept=["image/jpeg"]).send()
+    file = file[0].content
     image_stream = io.BytesIO(file)
     image = Image.open(image_stream)
-    image = image.convert('RGB')
-    image = image.resize((150, 150))
-    image.save("image.png", 'png')
-    index = None
-    with open('idx.txt', 'r') as file:
-        index = file.read()
-    if index == '0':
-        with open('idx.txt', 'w') as file:
-            file.write('1')
-    else:
-        with open('idx.txt', 'w') as file:
-            file.write('0')
-    results = call_detection_model(int(index))
-    # cl.user_session.set("index", index+1)
+    image.save("image.jpg")
     image.close()
+    results = get_prediction()
+    cl.user_session.set("has_uploaded_image", False)
     cl.user_session.set("results", results)
-    if results["has_cancer"]:
-        cl.user_session.set("template", template_for_has_cancer)
-    else:
-        cl.user_session.set("template", template_for_does_not_have_cancer)
-    prompt_with_history = CustomPromptTemplate(
-        template=cl.user_session.get("template"),
-        tools=tools,
-        input_variables=["input", "intermediate_steps", "history"]
-    )
-    llm_chain = LLMChain(prompt = prompt_with_history,llm=OpenAI(temperature=1.2,streaming=True),verbose=True)
-    tool_names = [tool.name for tool in tools]
-    output_parser = CustomOutputParser()
-    agent = LLMSingleActionAgent(
-        llm_chain=llm_chain, 
-        output_parser=output_parser,
-        stop=["\nObservation:"], 
-        allowed_tools=tool_names
-    )
-    memory=ConversationBufferWindowMemory(k=2)
-    agent_executor = AgentExecutor.from_agent_and_tools(
-        agent=agent, 
-        tools=tools, 
-        verbose=True, 
-        memory=memory
-    )
-    cl.user_session.set("agent_executor", agent_executor)
-    cl.user_session.set("has_uploaded_image", True)
     elements = [
-        cl.Image(name="image1", display="inline", path="./image.png")
+        cl.Image(name="image", display="inline", path="./image.jpg")
     ]
-    await cl.Message("Image has been uploaded and analyzing...\nUploaded image is:", elements=elements).send()
-    
+    await cl.Message("Image has been uploaded and analyzing...\nUploaded image is:", elements=elements).send() 
+    time.sleep(3)
+    await cl.Message("Please ask further questions").send()
 
 
 @cl.on_message
-async def main(message : str):
-    has_uploaded_image = cl.user_session.get("has_uploaded_image")
+async def main(message : cl.Message):
+    message = message.content
+    has_uploaded_image = True
     results = cl.user_session.get("results")
     if has_uploaded_image == False:
         await cl.Message("Please upload a relevent image to proceed with this conversation").send()
