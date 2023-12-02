@@ -1,0 +1,3 @@
+/server/node_modules
+/client/node_modules
+/chainlit/__pycache__
